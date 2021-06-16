@@ -46,7 +46,7 @@ fun sumsClient(hostname: String, port: Int) = runBlocking {
 
     while(true) {
         val request = readLine()
-        output.writeStringUtf8("$request\n")
+        output.writeStringUtf8("$request\r\n")
         val response = input.readUTF8Line()
         println("Server said: '$response'")
     }
