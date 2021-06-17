@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.net.InetSocketAddress
+import kotlin.system.exitProcess
 
 fun sumsServer(hostname: String, port: Int) = runBlocking {
     val server = aSocket(ActorSelectorManager(Dispatchers.IO)).tcp().bind(InetSocketAddress(hostname, port))
@@ -20,16 +21,26 @@ fun sumsServer(hostname: String, port: Int) = runBlocking {
             val output = socket.openWriteChannel(autoFlush = true)
 
             try {
-                while (true) {
+                while (!socket.isClosed) {
                     val line = input.readUTF8Line()
 
-                    println("${socket.remoteAddress}: $line")
+                    if (line == "c0000") {
+                        socket.close()
+                    } else {
+                        println("${socket.remoteAddress}: $line")
 
-                    val answer = line?.let {
-                        line.split(" ").map { it.toInt() }.sum()
+                        var answer = ""
+
+                        answer = try {
+                            line?.let {
+                                line.split(" ").map { it.toInt() }.sum()
+                            }.toString()
+                        } catch (e: Throwable) {
+                            e.toString()
+                        }
+
+                        output.writeStringUtf8("$answer\r\n")
                     }
-
-                    output.writeStringUtf8("$answer\r\n")
                 }
             } catch (e: Throwable) {
                 e.printStackTrace()
@@ -40,15 +51,25 @@ fun sumsServer(hostname: String, port: Int) = runBlocking {
 }
 
 fun sumsClient(hostname: String, port: Int) = runBlocking {
-    val socket = aSocket(ActorSelectorManager(Dispatchers.IO)).tcp().connect(InetSocketAddress(hostname, port))
-    val input = socket.openReadChannel()
-    val output = socket.openWriteChannel(autoFlush = true)
-
     while(true) {
-        val request = readLine()
-        output.writeStringUtf8("$request\r\n")
-        val response = input.readUTF8Line()
-        println("Server said: '$response'")
+        launch {
+            val socket = aSocket(ActorSelectorManager(Dispatchers.IO)).tcp().connect(InetSocketAddress(hostname, port))
+            val input = socket.openReadChannel()
+            val output = socket.openWriteChannel(autoFlush = true)
+
+            while (!socket.isClosed) {
+                val request = readLine()
+
+                if (request == "exit") {
+                    socket.close()
+                    exitProcess(0)
+                }
+
+                output.writeStringUtf8("$request\r\n")
+                val response = input.readUTF8Line()
+                println("Server said: '$response'")
+            }
+        }
     }
 }
 
@@ -63,8 +84,8 @@ fun usage() {
 fun main(args: Array<String>) {
     if(args.size == 1) {
         when(args[0]) {
-            "client" -> sumsClient("127.0.0.1", 2323)
-            "server" -> sumsServer("127.0.0.1", 2323)
+            "client" -> sumsClient("127.25.15.126", 2323)
+            "server" -> sumsServer("172.25.15.126", 8082)
             else -> usage()
         }
     } else {
